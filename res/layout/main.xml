@@ -9,7 +9,7 @@
         android:id="@+id/filesFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:name="com.olecco.android.PictureFetcher.FilesFragment"
+        android:name="com.olecco.android.PictureFetcher.ui.FilesFragment"
     />
 
 </FrameLayout>
