@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="main_back">#FF000000</color>
+    <color name="white_text_color">#FFDDDDDD</color>
+    <color name="back_transp_color">#80000000</color>
+
+</resources>

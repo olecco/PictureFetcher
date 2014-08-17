@@ -1,8 +1,14 @@
 package com.olecco.android.PictureFetcher;
 
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.TransitionDrawable;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.support.v4.util.LruCache;
 import android.widget.ImageView;
 
@@ -14,8 +20,10 @@ import java.lang.ref.WeakReference;
  */
 public class ImageLoader {
 
+    private static final int FADE_IN_TIME = 200;
+
     private final int maxMemory = (int) (Runtime.getRuntime().maxMemory() / 1024);
-    private final int cacheSize = maxMemory / 8;
+    private final int cacheSize = maxMemory / 10;
     private LruCache<File, Bitmap> mThumbnailsCache = new LruCache<File, Bitmap>(cacheSize) {
         @Override
         protected int sizeOf(File key, Bitmap value) {
@@ -23,39 +31,32 @@ public class ImageLoader {
         }
     };
 
-    private boolean mPaused;
-
     public void loadThumbnail(File file, ImageView imageView) {
-//        if (!mPaused) {
-            LoadingTaskWrapper wrapper = (LoadingTaskWrapper) imageView.getTag();
-            if (wrapper!= null && wrapper.getTask() != null) {
-                wrapper.getTask().cancel(true);
-                wrapper.getTask().setImageView(null);
-            }
+        LoadingTaskWrapper wrapper = (LoadingTaskWrapper) imageView.getTag();
+        if (wrapper!= null && wrapper.getTask() != null) {
+            wrapper.getTask().cancel(true);
+            wrapper.getTask().setImageView(null);
+        }
 
-            if ((wrapper != null && !file.equals(wrapper.getFile())) || wrapper == null) {
-                Bitmap bitmap = mThumbnailsCache.get(file);
-                if (bitmap != null) {
-                    setBitmapToImageView(bitmap, imageView);
-                }
-                else {
-                    setStubToImageView(imageView);
-                    ImageLoadingTask task = new ImageLoadingTask(file, imageView);
-                    wrapper = new LoadingTaskWrapper(file, task);
-                    imageView.setTag(wrapper);
-                    task.execute();
-                }
+        if ((wrapper != null && !file.equals(wrapper.getFile())) || wrapper == null) {
+            Bitmap bitmap = mThumbnailsCache.get(file);
+            if (bitmap != null) {
+                imageView.setImageBitmap(bitmap);
             }
-
-  //      }
+            else {
+                setStubToImageView(imageView);
+                ImageLoadingTask task = new ImageLoadingTask(file, imageView);
+                wrapper = new LoadingTaskWrapper(file, task);
+                imageView.setTag(wrapper);
+                task.execute();
+            }
+        }
     }
 
     private void setStubToImageView(ImageView imageView) {
-        imageView.setImageResource(R.drawable.ic_image_stub);
-    }
-
-    public void setPaused(boolean value) {
-        mPaused = value;
+        //imageView.setScaleType(ImageView.ScaleType.CENTER);
+        //imageView.setImageResource(R.drawable.ic_image_stub);
+        imageView.setImageResource(android.R.color.transparent);
     }
 
     public static Bitmap decodeSampledBitmapFromFile(File file, int actualWidth, int actualHeight) {
@@ -72,9 +73,30 @@ public class ImageLoader {
         }
     }
 
-    private static void setBitmapToImageView(Bitmap bitmap, ImageView imageView) {
+    private static void setBitmapToImageView(Bitmap bitmap, final ImageView imageView) {
         if (bitmap != null) {
-            imageView.setImageBitmap(bitmap);
+            Resources resources = imageView.getResources();
+            final TransitionDrawable td = new TransitionDrawable(
+                    new Drawable[]{
+                            new ColorDrawable(android.R.color.transparent),
+                            new BitmapDrawable(resources, bitmap)} );
+
+            //imageView.setBackgroundResource(R.drawable.ic_image_stub);
+            imageView.setImageDrawable(td);
+            td.startTransition(FADE_IN_TIME);
+            imageView.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                        imageView.setBackground(null);
+                    }
+                    else {
+                        imageView.setBackgroundDrawable(null);
+                    }
+                }
+            }, FADE_IN_TIME);
+            //imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            //imageView.setImageBitmap(bitmap);
         }
     }
 
@@ -146,6 +168,7 @@ public class ImageLoader {
                 if (imageView != null) {
                     LoadingTaskWrapper wrapper = (LoadingTaskWrapper) imageView.getTag();
                     if (wrapper != null && mFile.equals(wrapper.getFile())) {
+                        mThumbnailsCache.put(mFile, bitmap);
                         setBitmapToImageView(bitmap, imageView);
                     }
                 }

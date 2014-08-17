@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class FilesFragment extends Fragment {
 
+    private final static String TAG = "PictureFetcher";
     private final static int DEFAULT_FILES_CHUNK_SIZE = 20;
 
     private List<File> mFiles = new ArrayList<File>();
@@ -57,14 +58,7 @@ public class FilesFragment extends Fragment {
 
     private AbsListView.OnScrollListener mScrollListener = new AbsListView.OnScrollListener() {
         @Override
-        public void onScrollStateChanged(AbsListView view, int scrollState) {
-//            if (scrollState == SCROLL_STATE_IDLE) {
-//                mImageLoader.setPaused(true);
-//            }
-//            else {
-//                mImageLoader.setPaused(false);
-//            }
-        }
+        public void onScrollStateChanged(AbsListView view, int scrollState) { }
 
         @Override
         public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
@@ -90,28 +84,21 @@ public class FilesFragment extends Fragment {
         mFileList.setOnScrollListener(mScrollListener);
         mFileList.setAdapter(mAdapter);
 
-
-
-        Button btnTest = (Button) view.findViewById(R.id.btnTest);
-        btnTest.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-
-                startFilesFetching();
-
-
-            }
-        });
-
-
+        if (!isFetching()) {
+            startFilesFetching();
+        }
 
         return view;
     }
 
     @Override
-    public void onStop() {
-        super.onStop();
+    public void onDestroy() {
+        super.onDestroy();
         stopFilesFetching();
+    }
+
+    private boolean isFetching() {
+        return mFetcherThread != null && !mFetcherThread.isStopped();
     }
 
     private void clearFiles() {
@@ -120,6 +107,7 @@ public class FilesFragment extends Fragment {
     }
 
     private void startFilesFetching() {
+        stopFilesFetching();
         clearFiles();
         File path = FileUtils.getExternalStorage();
         mFetcherThread = new ImageFetcherThread(path, DEFAULT_FILES_CHUNK_SIZE, mSync);
@@ -135,8 +123,10 @@ public class FilesFragment extends Fragment {
     }
 
     private void continueFetching() {
-        synchronized (mSync) {
-            mSync.notify();
+        if (mFetcherThread != null && mFetcherThread.isWaiting()) {
+            synchronized (mSync) {
+                mSync.notify();
+            }
         }
     }
 
@@ -148,6 +138,7 @@ public class FilesFragment extends Fragment {
         private Object mSync;
         private File mPath;
         private AtomicBoolean mStopped = new AtomicBoolean(false);
+        private AtomicBoolean mWaiting = new AtomicBoolean(false);
 
         public ImageFetcherThread(File path, int chunkSize, Object sync) {
             mPath = path;
@@ -160,38 +151,39 @@ public class FilesFragment extends Fragment {
         @Override
         public void run() {
             if (mPath != null) {
+                Log.d(TAG, "Fetcher thread is started");
                 fetchImages(mPath);
             }
             notifyFilesFetched();
-            Log.d("111", "thread stop");
+            Log.d(TAG, "Fetcher thread is stopped");
         }
 
         public void stopFetching() {
             mStopped.set(true);
         }
 
-        private boolean isStopped() {
+        public boolean isStopped() {
             return isInterrupted() || mStopped.get();
+        }
+
+        public boolean isWaiting() {
+            return mWaiting.get();
         }
 
         private void fetchImages(File directory) {
             if (!isStopped()) {
-
                 synchronized (mSync) {
-
-                    Log.d("111", "dir: " + directory.toString());
-
                     try {
                         File[] files = mFileExtensionFilter == null ? directory.listFiles() : directory.listFiles(mFileExtensionFilter);
-
                         if (!isStopped()) {
-
                             for (File file : files) {
 
                                 if (!isStopped() && mBuffer.size() == mChunkSize) {
                                     notifyFilesFetched();
-                                    Log.d("111", "wait");
+                                    mWaiting.set(true);
+                                    Log.d(TAG, "Fetcher thread is waiting");
                                     mSync.wait();
+                                    mWaiting.set(false);
                                     mBuffer.clear();
                                 }
 
@@ -208,9 +200,7 @@ public class FilesFragment extends Fragment {
                             }
                         }
 
-                    } catch (InterruptedException e) {
-
-                    }
+                    } catch (InterruptedException e) { }
                 }
             }
         }
@@ -240,6 +230,11 @@ public class FilesFragment extends Fragment {
         @Override
         public long getItemId(int position) {
             return position;
+        }
+
+        @Override
+        public boolean isEnabled(int position) {
+            return false;
         }
 
         @Override
